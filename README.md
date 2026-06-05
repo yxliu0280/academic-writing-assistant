@@ -59,14 +59,7 @@ Included in this repository:
 - editor and chat UI components
 - runtime configuration template
 - built-in demo manuscript assets
-
-Not included in this repository:
-
-- personal API keys
-- local application state
 - evaluation datasets
-- internal testing and debugging material
-- research-only benchmark scripts
 
 ## Public Data Files
 
