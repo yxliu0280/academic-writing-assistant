@@ -1,0 +1,26 @@
+# Main runtime model configuration.
+# On first run, the app will create `model_config.toml` from this template.
+#
+# Minimal fields most users need to edit:
+# - provider
+# - api_key
+# - text_model
+# - multimodal_model
+
+provider = "none"
+api_key = ""
+text_model = "qwen-plus"
+multimodal_model = "qwen-vl-max-latest"
+
+# Optional advanced overrides:
+# text_provider = "openai-compatible"
+# multimodal_provider = "openai-compatible"
+# base_url = "https://dashscope.aliyuncs.com/api/v2/apps/protocols/compatible-mode/v1"
+# multimodal_base_url = ""
+# text_api_key = ""
+# multimodal_api_key = ""
+# timeout = 30
+# max_retries = 3
+# debug = false
+# llm_cache_enabled = false
+# llm_cache_dir = ".cache/llm"

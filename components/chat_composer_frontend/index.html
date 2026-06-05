@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat Composer</title>
+    <style>
+      :root {
+        --border: #d1d5db;
+        --border-focus: #9ca3af;
+        --bg: #ffffff;
+        --text: #111827;
+        --muted: #9ca3af;
+        --composer-row-height: 56px;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .root {
+        position: relative;
+        height: 262px;
+        overflow: visible;
+      }
+      .tools-panel {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: auto;
+        bottom: calc(var(--composer-row-height) + 6px);
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        background: #ffffff;
+        box-shadow: 0 5px 12px rgba(15, 23, 42, 0.08);
+        padding: 10px 12px 22px;
+        transform: translateY(8px) scale(0.985);
+        transform-origin: bottom center;
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        will-change: transform, opacity;
+        backface-visibility: hidden;
+        transition: transform 0.30s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.26s ease, visibility 0s linear 0.30s;
+        z-index: 3;
+      }
+      .tools-panel.open {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+        transition: transform 0.30s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.26s ease, visibility 0s linear 0s;
+      }
+      .tools-title {
+        font-size: 12px;
+        color: #374151;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .check-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px 14px;
+        margin-bottom: 10px;
+      }
+      .check-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+        font-size: 13px;
+        color: #111827;
+        user-select: none;
+      }
+      .check-item input[type="checkbox"] {
+        accent-color: #6b7280;
+      }
+      .actions-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 8px;
+      }
+      .tool-btn {
+        border: 1px solid #d1d5db;
+        background: #f3f4f6;
+        color: #111827;
+        border-radius: 10px;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 7px 10px;
+        cursor: pointer;
+      }
+      .tool-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .composer-shell {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: auto;
+        bottom: 0;
+        height: var(--composer-row-height);
+        box-sizing: border-box;
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        background: var(--bg);
+        display: flex;
+        align-items: flex-end;
+        gap: 8px;
+        padding: 8px 10px;
+      }
+      .composer-shell:focus-within {
+        border-color: var(--border);
+        box-shadow: none;
+      }
+      .btn-plus {
+        width: 34px;
+        height: 34px;
+        border-radius: 999px;
+        border: 1px solid #e5e7eb;
+        background: #f9fafb;
+        color: #374151;
+        font-size: 24px;
+        line-height: 1;
+        cursor: pointer;
+      }
+      .btn-plus[disabled] {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+      .input-wrap {
+        flex: 1;
+        min-width: 0;
+      }
+      textarea {
+        width: 100%;
+        min-height: 18px;
+        max-height: 24px;
+        resize: none;
+        border: 0;
+        outline: none;
+        box-shadow: none;
+        font-size: 14px;
+        line-height: 1.5;
+        color: var(--text);
+        background: transparent;
+        overflow-y: auto;
+      }
+      textarea::placeholder {
+        color: var(--muted);
+        opacity: 1;
+      }
+      .btn-send {
+        width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        border: 0;
+        background: #111827;
+        color: #ffffff;
+        font-size: 18px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .btn-send[disabled] {
+        background: #9ca3af;
+        cursor: not-allowed;
+      }
+      .btn-send svg {
+        width: 20px;
+        height: 20px;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="root">
+      <div id="toolsPanel" class="tools-panel">
+        <div class="tools-title">Consistency Checks</div>
+        <div class="check-grid">
+          <label class="check-item"><input id="checkTable" type="checkbox" />Table</label>
+          <label class="check-item"><input id="checkFigure" type="checkbox" />Figure</label>
+          <label class="check-item"><input id="checkCitation" type="checkbox" />Citation</label>
+          <label class="check-item"><input id="checkTerminology" type="checkbox" />Terminology</label>
+        </div>
+        <div class="actions-row">
+          <button id="confirmRunBtn" class="tool-btn" type="button">Confirm Run</button>
+          <button id="undoBtn" class="tool-btn" type="button">Undo</button>
+        </div>
+      </div>
+      <div class="composer-shell">
+        <button id="plusBtn" class="btn-plus" type="button" aria-label="Open tools">+</button>
+        <div class="input-wrap">
+          <textarea id="composerInput" rows="1"></textarea>
+        </div>
+        <button id="sendBtn" class="btn-send" type="button" aria-label="Send message">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 19V7" stroke="#ffffff" stroke-width="3.1" stroke-linecap="round" />
+            <path d="M7 11L12 6L17 11" stroke="#ffffff" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <script>
+      function sendMessage(type, data) {
+        const payload = Object.assign(
+          {
+            isStreamlitMessage: true,
+            type: type,
+          },
+          data || {}
+        );
+        window.parent.postMessage(payload, "*");
+      }
+
+      function setComponentReady() {
+        sendMessage("streamlit:componentReady", { apiVersion: 1 });
+      }
+
+      function setFrameHeight(height) {
+        const h = Math.max(72, Math.ceil(height));
+        if (setFrameHeight.__lastHeight === h) return;
+        setFrameHeight.__lastHeight = h;
+        sendMessage("streamlit:setFrameHeight", { height: h });
+      }
+
+      function setComponentValue(value) {
+        sendMessage("streamlit:setComponentValue", { value: value });
+      }
+
+      const composerInput = document.getElementById("composerInput");
+      const plusBtn = document.getElementById("plusBtn");
+      const sendBtn = document.getElementById("sendBtn");
+      const toolsPanel = document.getElementById("toolsPanel");
+      const checkTable = document.getElementById("checkTable");
+      const checkFigure = document.getElementById("checkFigure");
+      const checkCitation = document.getElementById("checkCitation");
+      const checkTerminology = document.getElementById("checkTerminology");
+      const confirmRunBtn = document.getElementById("confirmRunBtn");
+      const undoBtn = document.getElementById("undoBtn");
+
+      let disabled = false;
+      let draft = "";
+      let placeholder = "Discuss findings, ask for revisions, or request grounded papers.";
+      let toolsOpen = false;
+      const composerClosedHeight = 56;
+      const composerOpenHeight = 262;
+      const expandedLift = composerOpenHeight - composerClosedHeight;
+      let selectedChecks = new Set(["table", "figure", "citation", "terminology"]);
+      let checkEnabled = {
+        table: true,
+        figure: true,
+        citation: true,
+        terminology: true,
+      };
+      let lastEventId = Date.now();
+
+      function nextEventId() {
+        lastEventId += 1;
+        return lastEventId;
+      }
+
+      function normalizeText(value) {
+        return String(value || "").replace(/\r\n/g, "\n");
+      }
+
+      function autoResize() {
+        composerInput.style.height = "18px";
+        composerInput.style.height = `${Math.min(composerInput.scrollHeight, 24)}px`;
+      }
+
+      function setFrameLift() {
+        const frame = window.frameElement;
+        if (!frame) return;
+        frame.style.marginTop = `-${expandedLift}px`;
+      }
+
+      function syncFrameHeight() {
+        const root = document.querySelector(".root");
+        if (root) {
+          root.style.height = `${composerOpenHeight}px`;
+        }
+        setFrameLift();
+        setFrameHeight(composerOpenHeight);
+      }
+
+      function syncButtons() {
+        if (!checkEnabled.table) selectedChecks.delete("table");
+        if (!checkEnabled.figure) selectedChecks.delete("figure");
+        if (!checkEnabled.citation) selectedChecks.delete("citation");
+        if (!checkEnabled.terminology) selectedChecks.delete("terminology");
+        const hasText = normalizeText(composerInput.value).trim().length > 0;
+        sendBtn.disabled = disabled || !hasText;
+        plusBtn.disabled = disabled;
+        composerInput.disabled = disabled;
+        checkTable.disabled = disabled || !checkEnabled.table;
+        checkFigure.disabled = disabled || !checkEnabled.figure;
+        checkCitation.disabled = disabled || !checkEnabled.citation;
+        checkTerminology.disabled = disabled || !checkEnabled.terminology;
+        confirmRunBtn.disabled = disabled || selectedChecks.size === 0;
+        undoBtn.disabled = disabled;
+      }
+
+      function selectedChecksArray() {
+        return Array.from(selectedChecks).sort();
+      }
+
+      function syncToolsState() {
+        const openNow = toolsOpen && !disabled;
+        checkTable.checked = selectedChecks.has("table");
+        checkFigure.checked = selectedChecks.has("figure");
+        checkCitation.checked = selectedChecks.has("citation");
+        checkTerminology.checked = selectedChecks.has("terminology");
+        toolsPanel.classList.toggle("open", openNow);
+        plusBtn.textContent = openNow ? "×" : "+";
+        syncFrameHeight();
+      }
+
+      function emitChecks(actionName) {
+        setComponentValue({
+          action: actionName,
+          draft: normalizeText(composerInput.value),
+          submit_text: "",
+          event_id: nextEventId(),
+          selected_checks: selectedChecksArray(),
+          tools_open: Boolean(toolsOpen && !disabled),
+        });
+      }
+
+      function onSend() {
+        const text = normalizeText(composerInput.value).trim();
+        if (!text || disabled) return;
+        setComponentValue({
+          action: "send",
+          draft: "",
+          submit_text: text,
+          event_id: nextEventId(),
+          selected_checks: selectedChecksArray(),
+          tools_open: Boolean(toolsOpen && !disabled),
+        });
+        composerInput.value = "";
+        draft = "";
+        autoResize();
+        syncButtons();
+      }
+
+      let inputTimer = null;
+      composerInput.addEventListener("input", () => {
+        draft = normalizeText(composerInput.value);
+        autoResize();
+        syncButtons();
+        if (inputTimer) clearTimeout(inputTimer);
+        inputTimer = setTimeout(() => {
+          setComponentValue({
+            action: "input",
+            draft,
+            submit_text: "",
+            event_id: nextEventId(),
+            selected_checks: selectedChecksArray(),
+            tools_open: Boolean(toolsOpen && !disabled),
+          });
+        }, 120);
+      });
+
+      composerInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          onSend();
+        }
+      });
+
+      plusBtn.addEventListener("click", () => {
+        if (disabled) return;
+        toolsOpen = !toolsOpen;
+        syncToolsState();
+      });
+      plusBtn.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        if (disabled) return;
+        toolsOpen = !toolsOpen;
+        syncToolsState();
+      });
+
+      function bindCheck(id, keyName) {
+        id.addEventListener("change", () => {
+          if (!checkEnabled[keyName]) {
+            id.checked = false;
+            selectedChecks.delete(keyName);
+            syncButtons();
+            syncToolsState();
+            return;
+          }
+          if (id.checked) selectedChecks.add(keyName);
+          else selectedChecks.delete(keyName);
+          syncButtons();
+          syncToolsState();
+        });
+      }
+      bindCheck(checkTable, "table");
+      bindCheck(checkFigure, "figure");
+      bindCheck(checkCitation, "citation");
+      bindCheck(checkTerminology, "terminology");
+
+      confirmRunBtn.addEventListener("click", () => {
+        if (disabled || selectedChecks.size === 0) return;
+        emitChecks("run_checks");
+      });
+
+      undoBtn.addEventListener("click", () => {
+        if (disabled) return;
+        emitChecks("undo");
+      });
+
+      sendBtn.addEventListener("click", onSend);
+
+      function normalizedCheckEnabled(raw) {
+        const safe = raw && typeof raw === "object" ? raw : {};
+        return {
+          table: safe.table !== false,
+          figure: safe.figure !== false,
+          citation: safe.citation !== false,
+          terminology: safe.terminology !== false,
+        };
+      }
+
+      function onRender(event) {
+        if (!event.data || !event.data.isStreamlitMessage) return;
+        if (event.data.type !== "streamlit:render") return;
+        const args = event.data.args || {};
+        disabled = Boolean(args.disabled);
+        const incomingToolsOpen = Boolean(args.tools_open);
+        toolsOpen = incomingToolsOpen;
+        checkEnabled = normalizedCheckEnabled(args.check_enabled);
+        selectedChecks = new Set(Array.isArray(args.selected_checks) ? args.selected_checks : []);
+        if (selectedChecks.size === 0) {
+          selectedChecks = new Set(["table", "figure", "citation", "terminology"]);
+        }
+        draft = normalizeText(args.draft || "");
+        placeholder = String(args.placeholder || placeholder);
+        composerInput.placeholder = placeholder;
+        if (normalizeText(composerInput.value) !== draft) {
+          composerInput.value = draft;
+        }
+        syncToolsState();
+        syncButtons();
+        autoResize();
+      }
+
+      window.addEventListener("message", onRender);
+      setComponentReady();
+      setTimeout(() => {
+        syncToolsState();
+        syncButtons();
+        autoResize();
+      }, 0);
+    </script>
+  </body>
+  </html>

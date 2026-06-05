@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Files Drag Bridge</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      function sendMessage(type, data) {
+        const payload = Object.assign(
+          {
+            isStreamlitMessage: true,
+            type: type,
+          },
+          data || {}
+        );
+        window.parent.postMessage(payload, "*");
+      }
+
+      function setComponentReady() {
+        sendMessage("streamlit:componentReady", { apiVersion: 1 });
+      }
+
+      function setFrameHeight(height) {
+        sendMessage("streamlit:setFrameHeight", { height: Math.max(0, Math.ceil(height || 0)) });
+      }
+
+      function setComponentValue(value) {
+        sendMessage("streamlit:setComponentValue", { value: value });
+      }
+
+      function onRender(event) {
+        if (!event.data || !event.data.isStreamlitMessage) return;
+        if (event.data.type === "streamlit:render") {
+          setFrameHeight(0);
+          return;
+        }
+        if (event.data.type !== "awc-files-dnd-component-event") return;
+        const payload = event.data.payload || {};
+        setComponentValue({
+          action: String(payload.action || "idle"),
+          payload: payload.payload && typeof payload.payload === "object" ? payload.payload : {},
+          event_id: Number(payload.event_id || 0) || 0,
+        });
+      }
+
+      window.addEventListener("message", onRender);
+      setComponentReady();
+      setFrameHeight(0);
+    </script>
+  </body>
+</html>

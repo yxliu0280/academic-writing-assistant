@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDF Viewer</title>
+    <style>
+      :root {
+        --border: #d0d7de;
+        --bg: #ffffff;
+        --text: #24292f;
+        --muted: #57606a;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .viewer-shell {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        background: var(--bg);
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+      }
+      .viewer-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        border-bottom: 1px solid var(--border);
+        padding: 10px 12px;
+        background: linear-gradient(120deg, #f8fbff 0%, #f7f7f7 100%);
+        min-height: 45px;
+        box-sizing: border-box;
+      }
+      .viewer-toolbar .title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .viewer-toolbar .hint {
+        font-size: 12px;
+        color: var(--muted);
+        text-align: right;
+        max-width: 280px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .toolbar-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: auto;
+        min-width: 0;
+      }
+      .zoom-controls {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+      }
+      .zoom-btn {
+        width: 26px;
+        height: 24px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background: #ffffff;
+        color: #334155;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .zoom-btn.wide {
+        width: auto;
+        min-width: 58px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .zoom-btn:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .pdf-scroll {
+        flex: 1;
+        overflow: auto;
+        background: #ffffff;
+        padding: 0;
+      }
+      .pdf-page {
+        margin: 0 auto;
+        width: 100%;
+        border: 0;
+        box-shadow: none;
+        background: #ffffff;
+      }
+      .pdf-canvas {
+        display: block;
+      }
+      .pdf-native-frame {
+        width: 100%;
+        min-height: 520px;
+        border: 0;
+        background: #ffffff;
+      }
+      .pdf-fallback-image {
+        display: block;
+        width: 100%;
+        height: auto;
+        background: #ffffff;
+      }
+      .empty-state,
+      .error-state {
+        min-height: 0;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: left;
+        padding: 20px;
+        color: #374151;
+      }
+      .empty-state {
+        text-align: center;
+        color: #57606a;
+        font-size: 13px;
+      }
+      .error-state {
+        align-items: stretch;
+        justify-content: flex-start;
+      }
+      .error-title {
+        font-size: 18px;
+        font-weight: 800;
+        color: #991b1b;
+        margin-bottom: 10px;
+      }
+      .error-item {
+        border: 1px solid #fecaca;
+        background: #fff1f2;
+        border-radius: 10px;
+        padding: 10px 12px;
+        margin-bottom: 8px;
+      }
+      .error-item .line {
+        font-weight: 700;
+        color: #7f1d1d;
+        margin-bottom: 3px;
+      }
+      .error-item .message {
+        color: #7f1d1d;
+        font-size: 13px;
+      }
+      .error-item .snippet {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        background: #ffffff;
+        border: 1px dashed #fca5a5;
+        border-radius: 6px;
+        margin-top: 6px;
+        padding: 5px 6px;
+        color: #374151;
+        font-size: 12px;
+      }
+      .log-box {
+        margin-top: 10px;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        background: #ffffff;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: #1f2937;
+        max-height: 220px;
+        overflow: auto;
+        padding: 8px;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="viewerShell" class="viewer-shell">
+      <div class="viewer-toolbar">
+        <div class="title">PDF Preview</div>
+        <div class="toolbar-right">
+          <div id="hint" class="hint">Double-click PDF text to locate source</div>
+          <div class="zoom-controls">
+            <button id="zoomOutBtn" class="zoom-btn" type="button" aria-label="Zoom out">-</button>
+            <button id="zoomResetBtn" class="zoom-btn wide" type="button" aria-label="Zoom reset">100%</button>
+            <button id="zoomInBtn" class="zoom-btn" type="button" aria-label="Zoom in">+</button>
+          </div>
+        </div>
+      </div>
+      <div id="pdfScroll" class="pdf-scroll"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+      function sendMessage(type, data) {
+        const payload = Object.assign(
+          {
+            isStreamlitMessage: true,
+            type: type,
+          },
+          data || {}
+        );
+        window.parent.postMessage(payload, "*");
+      }
+
+      function setComponentReady() {
+        sendMessage("streamlit:componentReady", { apiVersion: 1 });
+      }
+
+      function setFrameHeight(height) {
+        const h = Math.max(240, Math.ceil(height || 0));
+        sendMessage("streamlit:setFrameHeight", { height: h });
+      }
+
+      function setComponentValue(value) {
+        sendMessage("streamlit:setComponentValue", { value: value });
+      }
+
+      const viewerShell = document.getElementById("viewerShell");
+      const pdfScroll = document.getElementById("pdfScroll");
+      const hint = document.getElementById("hint");
+      const zoomOutBtn = document.getElementById("zoomOutBtn");
+      const zoomInBtn = document.getElementById("zoomInBtn");
+      const zoomResetBtn = document.getElementById("zoomResetBtn");
+
+      let eventId = Date.now();
+      let latestPdfBase64 = "";
+      let latestCompileOk = false;
+      let renderingToken = 0;
+      let activeBlobUrl = "";
+      let activePdfCanvases = [];
+      let activeFallbackImage = null;
+      let activeNativeEmbed = null;
+      let nativeBaseSrc = "";
+      let currentRenderMode = "empty";
+      let previewPngDpi = 300;
+      let zoom = 1;
+      const ZOOM_MIN = 0.6;
+      const ZOOM_MAX = 3.0;
+      const ZOOM_STEP = 0.15;
+
+      function nextEventId() {
+        eventId += 1;
+        return eventId;
+      }
+
+      function clearStage() {
+        activePdfCanvases = [];
+        activeFallbackImage = null;
+        activeNativeEmbed = null;
+        nativeBaseSrc = "";
+        while (pdfScroll.firstChild) {
+          pdfScroll.removeChild(pdfScroll.firstChild);
+        }
+      }
+
+      function clampZoom(value) {
+        const numeric = Number(value || 1);
+        if (!Number.isFinite(numeric)) return 1;
+        return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, numeric));
+      }
+
+      function updateZoomButtons() {
+        const pct = Math.round(zoom * 100);
+        zoomResetBtn.textContent = `${pct}%`;
+        const interactive = currentRenderMode === "pdfjs" || currentRenderMode === "fallback" || currentRenderMode === "native";
+        zoomOutBtn.disabled = !interactive || zoom <= ZOOM_MIN + 0.001;
+        zoomInBtn.disabled = !interactive || zoom >= ZOOM_MAX - 0.001;
+        zoomResetBtn.disabled = !interactive;
+      }
+
+      function applyZoomToActiveRender() {
+        const pct = Math.round(zoom * 100);
+        if (currentRenderMode === "pdfjs") {
+          activePdfCanvases.forEach((canvas) => {
+            canvas.style.width = `${Math.max(1, Math.round(canvas.width * zoom))}px`;
+            canvas.style.height = `${Math.max(1, Math.round(canvas.height * zoom))}px`;
+          });
+        } else if (currentRenderMode === "fallback" && activeFallbackImage) {
+          activeFallbackImage.style.width = `${pct}%`;
+          activeFallbackImage.style.maxWidth = "none";
+          activeFallbackImage.style.height = "auto";
+        } else if (currentRenderMode === "native" && activeNativeEmbed && nativeBaseSrc) {
+          activeNativeEmbed.setAttribute("src", `${nativeBaseSrc}#zoom=${pct}`);
+        }
+        updateZoomButtons();
+      }
+
+      function setZoom(nextZoom) {
+        zoom = clampZoom(nextZoom);
+        applyZoomToActiveRender();
+      }
+
+      function renderEmptyState() {
+        currentRenderMode = "empty";
+        clearStage();
+        const root = document.createElement("div");
+        root.className = "empty-state";
+        root.textContent = "Click Compile/Recompile to generate PDF preview.";
+        pdfScroll.appendChild(root);
+        updateZoomButtons();
+      }
+
+      function renderErrorState(title, errorItems, rawLog) {
+        currentRenderMode = "error";
+        clearStage();
+        const root = document.createElement("div");
+        root.className = "error-state";
+
+        const titleEl = document.createElement("div");
+        titleEl.className = "error-title";
+        titleEl.textContent = title || "Cannot generate PDF, please recheck";
+        root.appendChild(titleEl);
+
+        const list = Array.isArray(errorItems) ? errorItems : [];
+        if (list.length === 0) {
+          const fallback = document.createElement("div");
+          fallback.className = "error-item";
+          fallback.innerHTML = '<div class="message">No parsed line-level error was found. Please inspect raw logs below.</div>';
+          root.appendChild(fallback);
+        } else {
+          list.forEach((item) => {
+            const card = document.createElement("div");
+            card.className = "error-item";
+            const line = Number(item.line || -1);
+            const lineLabel = line > 0 ? `Line ${line}` : "Line Unknown";
+            const message = String(item.message || "LaTeX compile error");
+            const snippet = String(item.snippet || "").trim();
+            card.innerHTML =
+              `<div class="line">${lineLabel}</div>` +
+              `<div class="message">${message}</div>` +
+              (snippet ? `<div class="snippet">${snippet}</div>` : "");
+            root.appendChild(card);
+          });
+        }
+
+        if (rawLog) {
+          const logBox = document.createElement("div");
+          logBox.className = "log-box";
+          logBox.textContent = String(rawLog || "");
+          root.appendChild(logBox);
+        }
+
+        pdfScroll.appendChild(root);
+        updateZoomButtons();
+      }
+
+      function renderNativePdf(base64Text) {
+        currentRenderMode = "native";
+        clearStage();
+        const wrap = document.createElement("div");
+        wrap.className = "pdf-page";
+        wrap.style.width = "100%";
+        wrap.style.maxWidth = "100%";
+        if (activeBlobUrl) {
+          try {
+            URL.revokeObjectURL(activeBlobUrl);
+          } catch (_err) {}
+          activeBlobUrl = "";
+        }
+        const bytes = toUint8ArrayFromBase64(base64Text);
+        const blob = new Blob([bytes], { type: "application/pdf" });
+        activeBlobUrl = URL.createObjectURL(blob);
+        const embed = document.createElement("embed");
+        embed.className = "pdf-native-frame";
+        embed.setAttribute("type", "application/pdf");
+        nativeBaseSrc = activeBlobUrl;
+        activeNativeEmbed = embed;
+        wrap.appendChild(embed);
+        pdfScroll.appendChild(wrap);
+        applyZoomToActiveRender();
+      }
+
+      function renderFallbackImage(pngBase64Text) {
+        currentRenderMode = "fallback";
+        clearStage();
+        const wrap = document.createElement("div");
+        wrap.className = "pdf-page";
+        wrap.style.width = "100%";
+        wrap.style.maxWidth = "100%";
+        const image = document.createElement("img");
+        image.className = "pdf-fallback-image";
+        image.alt = "PDF Preview";
+        image.src = `data:image/png;base64,${pngBase64Text}`;
+        image.addEventListener("dblclick", (event) => {
+          const rect = image.getBoundingClientRect();
+          const displayWidth = rect.width || 1;
+          const displayHeight = rect.height || 1;
+          const naturalWidth = image.naturalWidth || displayWidth;
+          const naturalHeight = image.naturalHeight || displayHeight;
+          const px = Math.max(0, Math.min(event.clientX - rect.left, displayWidth));
+          const py = Math.max(0, Math.min(event.clientY - rect.top, displayHeight));
+          const sourceX = (px / displayWidth) * naturalWidth;
+          const sourceY = (py / displayHeight) * naturalHeight;
+          const dpi = Number(previewPngDpi || 300) || 300;
+          const synctexX = sourceX * (72 / dpi);
+          const synctexY = sourceY * (72 / dpi);
+          setComponentValue({
+            action: "pdf_dblclick",
+            page: 1,
+            x: Number(synctexX || 0),
+            y: Number(synctexY || 0),
+            event_id: nextEventId(),
+          });
+        });
+        activeFallbackImage = image;
+        wrap.appendChild(image);
+        pdfScroll.appendChild(wrap);
+        applyZoomToActiveRender();
+      }
+
+      function toUint8ArrayFromBase64(base64Text) {
+        const binary = atob(base64Text);
+        const len = binary.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i += 1) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes;
+      }
+
+      async function renderPdf(base64Text, token) {
+        if (!window.pdfjsLib) {
+          throw new Error("pdfjs unavailable");
+        }
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+        const loadingTask = window.pdfjsLib.getDocument({ data: toUint8ArrayFromBase64(base64Text) });
+        const pdf = await loadingTask.promise;
+
+        clearStage();
+        currentRenderMode = "pdfjs";
+        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+          if (token !== renderingToken) return;
+          const page = await pdf.getPage(pageNumber);
+          const viewport = page.getViewport({ scale: 1.35 });
+          const pageWrap = document.createElement("div");
+          pageWrap.className = "pdf-page";
+          const canvas = document.createElement("canvas");
+          canvas.className = "pdf-canvas";
+          const ctx = canvas.getContext("2d", { alpha: false });
+          canvas.width = Math.floor(viewport.width);
+          canvas.height = Math.floor(viewport.height);
+          activePdfCanvases.push(canvas);
+          pageWrap.appendChild(canvas);
+          pdfScroll.appendChild(pageWrap);
+
+          await page.render({ canvasContext: ctx, viewport }).promise;
+
+          canvas.addEventListener("dblclick", (event) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.max(0, Math.min(event.clientX - rect.left, rect.width || 1));
+            const y = Math.max(0, Math.min(event.clientY - rect.top, rect.height || 1));
+            const pixelX = (rect.width || 1) > 0 ? x * (canvas.width / (rect.width || 1)) : x;
+            const pixelY = (rect.height || 1) > 0 ? y * (canvas.height / (rect.height || 1)) : y;
+            const scale = Number(viewport.scale || 1) || 1;
+            const synctexX = pixelX / scale;
+            const synctexY = pixelY / scale;
+            setComponentValue({
+              action: "pdf_dblclick",
+              page: pageNumber,
+              x: Number(synctexX || 0),
+              y: Number(synctexY || 0),
+              event_id: nextEventId(),
+            });
+          });
+        }
+        applyZoomToActiveRender();
+      }
+
+      async function renderState(args) {
+        const hasCompiled = Boolean(args.has_compiled);
+        const compileOk = Boolean(args.compile_ok);
+        const pdfBase64 = String(args.pdf_base64 || "").trim();
+        const previewPngBase64 = String(args.preview_png_base64 || "").trim();
+        const parsedDpi = Number(args.preview_png_dpi || 300);
+        previewPngDpi = Number.isFinite(parsedDpi) && parsedDpi > 10 ? parsedDpi : 300;
+        const errorTitle = String(args.error_title || "");
+        const errorItems = Array.isArray(args.error_items) ? args.error_items : [];
+        const errorLog = String(args.error_log || "");
+        const hasErrorPayload = errorItems.length > 0 || errorLog.trim().length > 0;
+
+        latestCompileOk = compileOk;
+        latestPdfBase64 = pdfBase64;
+
+        if (!compileOk && hasErrorPayload) {
+          hint.textContent = "Compile failed. Fix errors and recompile.";
+          renderErrorState(errorTitle || "Cannot generate PDF, please recheck", errorItems, errorLog);
+          return;
+        }
+
+        if (!hasCompiled) {
+          hint.textContent = "Double-click PDF text to locate source";
+          renderEmptyState();
+          return;
+        }
+
+        if (!compileOk) {
+          hint.textContent = "Compile failed. Fix errors and recompile.";
+          renderErrorState(errorTitle || "Cannot generate PDF, please recheck", errorItems, errorLog);
+          return;
+        }
+
+        if (!pdfBase64) {
+          hint.textContent = "Click Compile/Recompile to render PDF.";
+          renderEmptyState();
+          return;
+        }
+
+        hint.textContent = "Double-click PDF text to locate source (SyncTeX).";
+        renderingToken += 1;
+        const token = renderingToken;
+        try {
+          await renderPdf(pdfBase64, token);
+        } catch (error) {
+          if (previewPngBase64) {
+            hint.textContent = "Preview rendered in fallback mode.";
+            renderFallbackImage(previewPngBase64);
+          } else {
+            hint.textContent = "Preview rendered in fallback mode (double-click sync unavailable).";
+            renderNativePdf(pdfBase64);
+          }
+        }
+      }
+
+      function onRender(event) {
+        if (!event.data || !event.data.isStreamlitMessage) return;
+        if (event.data.type !== "streamlit:render") return;
+
+        const args = event.data.args || {};
+        const height = Math.max(320, Number(args.height || 560));
+        viewerShell.style.height = `${height}px`;
+        setFrameHeight(height + 8);
+        renderState(args);
+      }
+
+      window.addEventListener("message", onRender);
+      window.addEventListener("beforeunload", () => {
+        if (!activeBlobUrl) return;
+        try {
+          URL.revokeObjectURL(activeBlobUrl);
+        } catch (_err) {}
+      });
+      zoomOutBtn.addEventListener("click", () => setZoom(zoom - ZOOM_STEP));
+      zoomInBtn.addEventListener("click", () => setZoom(zoom + ZOOM_STEP));
+      zoomResetBtn.addEventListener("click", () => setZoom(1));
+      pdfScroll.addEventListener(
+        "wheel",
+        (event) => {
+          if (!event.ctrlKey) return;
+          event.preventDefault();
+          const factor = Math.exp(-event.deltaY * 0.0015);
+          setZoom(zoom * factor);
+        },
+        { passive: false }
+      );
+      setComponentReady();
+      setFrameHeight(560);
+      renderEmptyState();
+      setComponentValue({ action: "idle", page: 0, x: 0, y: 0, event_id: 0 });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interactive Editor</title>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --border: #d0d7de;
+        --text: #24292f;
+        --selection: #c6e6ff;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--text);
+      }
+      .wrapper {
+        position: relative;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--bg);
+        box-sizing: border-box;
+        overflow: hidden;
+      }
+      .toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(120deg, #f8fbff 0%, #f7f7f7 100%);
+      }
+      .toolbar h4 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .selection {
+        font-size: 12px;
+        color: #57606a;
+        max-width: 55%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .editor {
+        min-height: 220px;
+        max-height: none;
+        overflow: auto;
+        outline: none;
+        padding: 14px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+      }
+      .editor:focus {
+        box-shadow: none;
+      }
+      .selected-range {
+        background: #bfdbfe;
+        box-shadow: inset 0 -1px 0 #60a5fa;
+        border-radius: 2px;
+      }
+      .selection-popover,
+      .edit-popover {
+        position: fixed;
+        z-index: 20;
+        min-width: 220px;
+        max-width: 320px;
+        padding: 8px;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        background: #ffffff;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+        font-size: 12px;
+      }
+      .selection-popover.hidden,
+      .edit-popover.hidden {
+        display: none;
+      }
+      .popover-text {
+        color: #334155;
+        margin-bottom: 6px;
+      }
+      .popover-actions {
+        display: flex;
+        gap: 6px;
+        justify-content: flex-end;
+      }
+      .popover-btn {
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background: #f8fafc;
+        color: #0f172a;
+        padding: 4px 8px;
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .popover-btn.primary {
+        background: #2563eb;
+        border-color: #1d4ed8;
+        color: #ffffff;
+      }
+      .wrapper.focus-pulse {
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.22);
+        transition: box-shadow 0.25s ease;
+      }
+      ::selection {
+        background: var(--selection);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="wrapper" class="wrapper">
+      <div class="toolbar">
+        <h4>Interactive LaTeX Editor</h4>
+        <div id="selectionLabel" class="selection">Selection: none</div>
+      </div>
+      <div id="editor" class="editor" contenteditable="true" spellcheck="false"></div>
+      <div id="selectionPopover" class="selection-popover hidden">
+        <div class="popover-text">Use this highlighted span for analysis?</div>
+        <div class="popover-actions">
+          <button id="cancelSelectionBtn" class="popover-btn" type="button">Cancel Selection</button>
+          <button id="confirmSelectionBtn" class="popover-btn primary" type="button">Confirm Selection</button>
+        </div>
+      </div>
+      <div id="editConfirmPopover" class="edit-popover hidden">
+        <div class="popover-text">The highlighted context was edited. Confirm this change?</div>
+        <div class="popover-actions">
+          <button id="cancelEditBtn" class="popover-btn" type="button">Keep Original</button>
+          <button id="confirmEditBtn" class="popover-btn primary" type="button">Confirm Edit</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const editor = document.getElementById("editor");
+      const wrapper = document.getElementById("wrapper");
+      const selectionLabel = document.getElementById("selectionLabel");
+      const selectionPopover = document.getElementById("selectionPopover");
+      const confirmSelectionBtn = document.getElementById("confirmSelectionBtn");
+      const cancelSelectionBtn = document.getElementById("cancelSelectionBtn");
+      const editConfirmPopover = document.getElementById("editConfirmPopover");
+      const confirmEditBtn = document.getElementById("confirmEditBtn");
+      const cancelEditBtn = document.getElementById("cancelEditBtn");
+
+      let applyingRender = false;
+      let suppressSelectionUntil = 0;
+      let targetHeight = 400;
+      let documentText = "";
+      let activeSelectionStart = -1;
+      let activeSelectionEnd = -1;
+      let backendSelectionStatus = "none";
+      let backendConfirmedPreview = "";
+      let lastFocusEventId = 0;
+      let lastBackendSyncEventId = 0;
+      let focusResetTimerId = null;
+      let transientFocusLockUntil = 0;
+      let pendingEditConfirmation = null;
+      let localDirty = false;
+      let currentFilePath = "main.tex";
+
+      let latestPayload = {
+        text: "",
+        file_path: "main.tex",
+        selection: "",
+        selection_start: -1,
+        selection_end: -1,
+        trigger: "init",
+        confirm_action: "",
+        focus_applied: false,
+      };
+
+      function sendMessage(type, data) {
+        const payload = Object.assign(
+          {
+            isStreamlitMessage: true,
+            type: type,
+          },
+          data || {}
+        );
+        window.parent.postMessage(payload, "*");
+      }
+
+      function setComponentReady() {
+        sendMessage("streamlit:componentReady", { apiVersion: 1 });
+      }
+
+      function setFrameHeight(height) {
+        sendMessage("streamlit:setFrameHeight", { height: height });
+      }
+
+      function updateFrameHeight(extraHeight = 0) {
+        const base = Math.max(300, targetHeight + 8);
+        const extra = Math.max(0, Math.ceil(extraHeight));
+        setFrameHeight(base + extra);
+      }
+
+      function setComponentValue(value) {
+        const nextValue = Object.assign({}, value || {}, {
+          file_path: currentFilePath,
+        });
+        sendMessage("streamlit:setComponentValue", { value: nextValue });
+      }
+
+      function normalizeText(value) {
+        return (value || "").replace(/\u00a0/g, " ");
+      }
+
+      function getEditorText() {
+        return normalizeText(editor.innerText || "");
+      }
+
+      function setEditorText(value) {
+        applyingRender = true;
+        documentText = value || "";
+        editor.textContent = documentText;
+        applyingRender = false;
+      }
+
+      function escapeHtml(value) {
+        return value
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;");
+      }
+
+      function renderPersistentSelection() {
+        suppressSelectionUntil = Date.now() + 120;
+        applyingRender = true;
+        const text = documentText || "";
+        if (
+          activeSelectionStart < 0 ||
+          activeSelectionEnd <= activeSelectionStart ||
+          activeSelectionEnd > text.length
+        ) {
+          editor.textContent = text;
+          applyingRender = false;
+          return;
+        }
+        const before = escapeHtml(text.slice(0, activeSelectionStart));
+        const selected = escapeHtml(text.slice(activeSelectionStart, activeSelectionEnd));
+        const after = escapeHtml(text.slice(activeSelectionEnd));
+        editor.innerHTML = `${before}<span class="selected-range">${selected}</span>${after}`;
+        applyingRender = false;
+      }
+
+      function restorePlainEditorText() {
+        if (applyingRender) return;
+        if (activeSelectionStart < 0 || activeSelectionEnd <= activeSelectionStart) return;
+        applyingRender = true;
+        editor.textContent = documentText || "";
+        applyingRender = false;
+        activeSelectionStart = -1;
+        activeSelectionEnd = -1;
+      }
+
+      function hideSelectionPopover() {
+        selectionPopover.classList.add("hidden");
+        selectionPopover.style.visibility = "hidden";
+        updateFrameHeight(0);
+      }
+
+      function hideEditConfirmPopover() {
+        editConfirmPopover.classList.add("hidden");
+        editConfirmPopover.style.visibility = "hidden";
+        updateFrameHeight(0);
+      }
+
+      function extractAnchorRect(range) {
+        if (!range) return null;
+
+        const caretRange = range.cloneRange();
+        caretRange.collapse(false);
+        const caretRects = Array.from(caretRange.getClientRects() || []);
+        for (let idx = caretRects.length - 1; idx >= 0; idx -= 1) {
+          const rect = caretRects[idx];
+          if (rect && (rect.width > 0 || rect.height > 0)) {
+            return rect;
+          }
+        }
+
+        const rects = Array.from(range.getClientRects() || []);
+        for (let idx = rects.length - 1; idx >= 0; idx -= 1) {
+          const rect = rects[idx];
+          if (rect && (rect.width > 0 || rect.height > 0)) {
+            return rect;
+          }
+        }
+
+        const fallback = range.getBoundingClientRect();
+        if (fallback && (fallback.width > 0 || fallback.height > 0)) {
+          return fallback;
+        }
+        return null;
+      }
+
+      function showSelectionPopover(anchorRect) {
+        if (!anchorRect) return;
+        const editorRect = editor.getBoundingClientRect();
+        const margin = 8;
+        const topBound = Math.max(editorRect.top + 4, margin);
+        const bottomBound = Math.min(editorRect.bottom - 4, window.innerHeight - margin);
+        const leftBound = Math.max(editorRect.left + 4, margin);
+        const rightBound = Math.min(editorRect.right - 4, window.innerWidth - margin);
+
+        selectionPopover.classList.remove("hidden");
+        selectionPopover.style.visibility = "hidden";
+        selectionPopover.style.left = "0px";
+        selectionPopover.style.top = "0px";
+        const measuredRect = selectionPopover.getBoundingClientRect();
+        const popoverHeight = Math.max(Math.ceil(measuredRect.height), 92);
+        const popoverWidth = Math.max(Math.ceil(measuredRect.width), 236);
+
+        const left = Math.max(
+          leftBound,
+          Math.min(rightBound - popoverWidth, anchorRect.left + 8)
+        );
+
+        const belowTop = anchorRect.bottom + 8;
+        const aboveTop = anchorRect.top - popoverHeight - 8;
+        const canFitBelow = belowTop + popoverHeight <= bottomBound;
+        const canFitAbove = aboveTop >= topBound;
+        let top = belowTop;
+
+        if (!canFitBelow && canFitAbove) {
+          top = aboveTop;
+        } else if (canFitBelow && canFitAbove) {
+          const spaceBelow = bottomBound - (anchorRect.bottom + 8);
+          const spaceAbove = anchorRect.top - 8 - topBound;
+          top = spaceBelow >= spaceAbove ? belowTop : aboveTop;
+        } else if (!canFitBelow && !canFitAbove) {
+          const spaceBelow = bottomBound - (anchorRect.bottom + 8);
+          const spaceAbove = anchorRect.top - 8 - topBound;
+          top = spaceAbove >= spaceBelow ? topBound : (bottomBound - popoverHeight);
+        }
+
+        top = Math.max(topBound, Math.min(bottomBound - popoverHeight, top));
+        selectionPopover.style.left = `${left}px`;
+        selectionPopover.style.top = `${top}px`;
+        selectionPopover.style.visibility = "visible";
+        selectionPopover.classList.remove("hidden");
+        updateFrameHeight(0);
+      }
+
+      function showEditConfirmPopover() {
+        const rect = editor.getBoundingClientRect();
+        const width = 280;
+        const left = Math.max(10, rect.right - width - 8);
+        const top = Math.max(10, rect.top + 12);
+        editConfirmPopover.style.left = `${left}px`;
+        editConfirmPopover.style.top = `${top}px`;
+        editConfirmPopover.style.visibility = "visible";
+        editConfirmPopover.classList.remove("hidden");
+        updateFrameHeight(0);
+      }
+
+      function clearPersistentSelection() {
+        activeSelectionStart = -1;
+        activeSelectionEnd = -1;
+        renderPersistentSelection();
+        hideSelectionPopover();
+      }
+
+      function shouldSuppressSelection() {
+        return Date.now() < suppressSelectionUntil;
+      }
+
+      function updateSelectionLabelByStatus() {
+        if (backendSelectionStatus === "confirmed") {
+          selectionLabel.textContent = "Selection: confirmed";
+          return;
+        }
+        if (backendSelectionStatus === "pending") {
+          selectionLabel.textContent = "Selection: pending";
+          return;
+        }
+        selectionLabel.textContent = "Selection: none";
+      }
+
+      function computeRangeOffsets(root, range) {
+        if (!range) return { start: -1, end: -1 };
+        const headRange = range.cloneRange();
+        headRange.selectNodeContents(root);
+        headRange.setEnd(range.startContainer, range.startOffset);
+        const start = normalizeText(headRange.toString()).length;
+        const selected = normalizeText(range.toString());
+        const end = start + selected.length;
+        return { start, end };
+      }
+
+      function computeChangedSpan(previousText, nextText) {
+        const oldText = String(previousText || "");
+        const newText = String(nextText || "");
+        if (oldText === newText) {
+          return null;
+        }
+        let prefix = 0;
+        const oldLen = oldText.length;
+        const newLen = newText.length;
+        const maxPrefix = Math.min(oldLen, newLen);
+        while (prefix < maxPrefix && oldText[prefix] === newText[prefix]) {
+          prefix += 1;
+        }
+
+        let suffix = 0;
+        const oldRemain = oldLen - prefix;
+        const newRemain = newLen - prefix;
+        const maxSuffix = Math.min(oldRemain, newRemain);
+        while (
+          suffix < maxSuffix &&
+          oldText[oldLen - 1 - suffix] === newText[newLen - 1 - suffix]
+        ) {
+          suffix += 1;
+        }
+
+        return {
+          oldStart: prefix,
+          oldEnd: oldLen - suffix,
+          newStart: prefix,
+          newEnd: newLen - suffix,
+        };
+      }
+
+      function rangesOverlap(startA, endA, startB, endB) {
+        if (endA < startA || endB < startB) return false;
+        // Treat zero-length edits (pure insertion) as overlapping when insertion point is inside range.
+        if (startA === endA) {
+          return startA >= startB && startA < endB;
+        }
+        if (startB === endB) {
+          return startB >= startA && startB < endA;
+        }
+        return Math.max(startA, startB) < Math.min(endA, endB);
+      }
+
+      function captureSelection(triggerName) {
+        if (shouldSuppressSelection()) return;
+        if (pendingEditConfirmation) return;
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) {
+          if (backendSelectionStatus !== "confirmed") {
+            clearPersistentSelection();
+          } else {
+            hideSelectionPopover();
+          }
+          latestPayload = {
+            ...latestPayload,
+            text: documentText,
+            selection: "",
+            selection_start: -1,
+            selection_end: -1,
+            trigger: triggerName,
+          };
+          updateSelectionLabelByStatus();
+          setComponentValue(latestPayload);
+          return;
+        }
+
+        const range = selection.getRangeAt(0);
+        const selectionText = normalizeText(selection.toString() || "");
+        const withinEditor =
+          editor.contains(range.startContainer) && editor.contains(range.endContainer);
+
+        if (!selectionText || !withinEditor) {
+          if (backendSelectionStatus !== "confirmed") {
+            clearPersistentSelection();
+          } else {
+            hideSelectionPopover();
+          }
+          latestPayload = {
+            ...latestPayload,
+            text: documentText,
+            selection: "",
+            selection_start: -1,
+            selection_end: -1,
+            trigger: triggerName,
+            confirm_action: "",
+          };
+          updateSelectionLabelByStatus();
+          setComponentValue(latestPayload);
+          return;
+        }
+
+        const { start, end } = computeRangeOffsets(editor, range);
+        if (start < 0 || end <= start) {
+          return;
+        }
+        const anchorRect = extractAnchorRect(range);
+        documentText = getEditorText();
+        activeSelectionStart = start;
+        activeSelectionEnd = end;
+        showSelectionPopover(anchorRect);
+
+        latestPayload = {
+          text: documentText,
+          selection: selectionText,
+          selection_start: start,
+          selection_end: end,
+          trigger: triggerName,
+          confirm_action: "",
+          focus_applied: false,
+        };
+
+        const preview =
+          selectionText.length > 80
+            ? `${selectionText.slice(0, 80)}...`
+            : selectionText;
+        selectionLabel.textContent = `Selection: ${preview}`;
+        setComponentValue(latestPayload);
+      }
+
+      function onEditorInput() {
+        if (applyingRender) return;
+        const nextText = getEditorText();
+        const hasConfirmedSelection =
+          backendSelectionStatus === "confirmed" &&
+          activeSelectionStart >= 0 &&
+          activeSelectionEnd > activeSelectionStart;
+
+        if (hasConfirmedSelection) {
+          const changed = computeChangedSpan(documentText, nextText);
+          if (
+            changed &&
+            rangesOverlap(
+              changed.oldStart,
+              changed.oldEnd,
+              activeSelectionStart,
+              activeSelectionEnd
+            )
+          ) {
+            // Editing inside a confirmed span invalidates that span and forces re-selection.
+            documentText = nextText;
+            activeSelectionStart = -1;
+            activeSelectionEnd = -1;
+            backendSelectionStatus = "none";
+            backendConfirmedPreview = "";
+            pendingEditConfirmation = null;
+            hideSelectionPopover();
+            hideEditConfirmPopover();
+            latestPayload = {
+              ...latestPayload,
+              text: documentText,
+              selection: "",
+              selection_start: -1,
+              selection_end: -1,
+              trigger: "input",
+              confirm_action: "invalidate_selection",
+              focus_applied: false,
+            };
+            localDirty = true;
+            updateSelectionLabelByStatus();
+            setComponentValue(latestPayload);
+            latestPayload = { ...latestPayload, confirm_action: "" };
+            return;
+          }
+
+          if (changed) {
+            const delta =
+              (changed.newEnd - changed.newStart) -
+              (changed.oldEnd - changed.oldStart);
+            if (changed.oldEnd <= activeSelectionStart) {
+              activeSelectionStart = Math.max(0, activeSelectionStart + delta);
+              activeSelectionEnd = Math.max(activeSelectionStart, activeSelectionEnd + delta);
+            }
+          }
+
+          documentText = nextText;
+          activeSelectionStart = Math.max(0, Math.min(activeSelectionStart, documentText.length));
+          activeSelectionEnd = Math.max(activeSelectionStart, Math.min(activeSelectionEnd, documentText.length));
+          hideSelectionPopover();
+          hideEditConfirmPopover();
+          renderPersistentSelection();
+          latestPayload = {
+            ...latestPayload,
+            text: documentText,
+            selection: documentText.slice(activeSelectionStart, activeSelectionEnd),
+            selection_start: activeSelectionStart,
+            selection_end: activeSelectionEnd,
+            trigger: "input",
+            confirm_action: "preserve_selection",
+            focus_applied: false,
+          };
+          localDirty = true;
+          updateSelectionLabelByStatus();
+          setComponentValue(latestPayload);
+          latestPayload = { ...latestPayload, confirm_action: "" };
+          return;
+        }
+
+        documentText = nextText;
+        activeSelectionStart = -1;
+        activeSelectionEnd = -1;
+        backendSelectionStatus = "none";
+        backendConfirmedPreview = "";
+        hideSelectionPopover();
+        hideEditConfirmPopover();
+        latestPayload = {
+          ...latestPayload,
+          text: documentText,
+          selection: "",
+          selection_start: -1,
+          selection_end: -1,
+          trigger: "input",
+          confirm_action: "",
+          focus_applied: false,
+        };
+        localDirty = true;
+        updateSelectionLabelByStatus();
+        setComponentValue(latestPayload);
+      }
+
+      function applyFocusToEditor(start, end) {
+        const text = documentText || "";
+        if (!text) return;
+        const boundedStart = Math.max(0, Math.min(Number(start || 0), text.length));
+        const boundedEnd = Math.max(boundedStart, Math.min(Number(end || boundedStart), text.length));
+        if (boundedEnd <= boundedStart) return;
+
+        const previousStart = activeSelectionStart;
+        const previousEnd = activeSelectionEnd;
+        const hadConfirmedRange =
+          backendSelectionStatus === "confirmed" &&
+          previousStart >= 0 &&
+          previousEnd > previousStart;
+
+        applyingRender = true;
+        editor.textContent = text;
+        applyingRender = false;
+
+        const node = editor.firstChild;
+        if (node && node.nodeType === Node.TEXT_NODE) {
+          const range = document.createRange();
+          range.setStart(node, boundedStart);
+          range.setEnd(node, boundedEnd);
+          const selection = window.getSelection();
+          if (selection) {
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+        }
+
+        const ratio = boundedStart / Math.max(1, text.length);
+        const maxScroll = Math.max(0, editor.scrollHeight - editor.clientHeight);
+        editor.scrollTop = Math.max(0, Math.min(maxScroll, ratio * maxScroll - 42));
+
+        wrapper.classList.add("focus-pulse");
+        activeSelectionStart = boundedStart;
+        activeSelectionEnd = boundedEnd;
+        renderPersistentSelection();
+        transientFocusLockUntil = Date.now() + 1300;
+
+        if (focusResetTimerId) {
+          window.clearTimeout(focusResetTimerId);
+          focusResetTimerId = null;
+        }
+        focusResetTimerId = window.setTimeout(() => {
+          focusResetTimerId = null;
+          transientFocusLockUntil = 0;
+          wrapper.classList.remove("focus-pulse");
+          if (hadConfirmedRange) {
+            activeSelectionStart = previousStart;
+            activeSelectionEnd = previousEnd;
+            renderPersistentSelection();
+          } else {
+            activeSelectionStart = -1;
+            activeSelectionEnd = -1;
+            applyingRender = true;
+            editor.textContent = documentText || "";
+            applyingRender = false;
+          }
+        }, 1200);
+      }
+
+      editor.addEventListener("input", onEditorInput);
+      editor.addEventListener("blur", () => {
+        const latestText = getEditorText();
+        if (latestText !== documentText) {
+          documentText = latestText;
+        }
+        const hasConfirmedSelection =
+          backendSelectionStatus === "confirmed" &&
+          activeSelectionStart >= 0 &&
+          activeSelectionEnd > activeSelectionStart;
+        latestPayload = {
+          ...latestPayload,
+          text: documentText,
+          selection: hasConfirmedSelection
+            ? documentText.slice(activeSelectionStart, activeSelectionEnd)
+            : "",
+          selection_start: hasConfirmedSelection ? activeSelectionStart : -1,
+          selection_end: hasConfirmedSelection ? activeSelectionEnd : -1,
+          trigger: "input",
+          confirm_action: hasConfirmedSelection ? "preserve_selection" : "",
+          focus_applied: false,
+        };
+        localDirty = true;
+        setComponentValue(latestPayload);
+        latestPayload = { ...latestPayload, confirm_action: "" };
+      });
+      editor.addEventListener("mousedown", () => {
+        if (backendSelectionStatus !== "confirmed") {
+          restorePlainEditorText();
+        }
+        hideSelectionPopover();
+      });
+      editor.addEventListener("mouseup", () => captureSelection("mouseup"));
+      editor.addEventListener("keydown", (event) => {
+        const key = String(event.key || "").toLowerCase();
+        const isSelectAll = (event.metaKey || event.ctrlKey) && !event.altKey && key === "a";
+        if (!isSelectAll) return;
+        event.preventDefault();
+        const text = getEditorText();
+        if (!text) return;
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        const selection = window.getSelection();
+        if (!selection) return;
+        selection.removeAllRanges();
+        selection.addRange(range);
+        window.requestAnimationFrame(() => {
+          captureSelection("keyboard_select_all");
+        });
+      });
+      editor.addEventListener("keyup", (event) => {
+        if (event.key === "Shift" || event.key.startsWith("Arrow")) {
+          captureSelection("keyboard_selection");
+        }
+      });
+
+      editor.addEventListener("paste", (event) => {
+        event.preventDefault();
+        const text = (event.clipboardData || window.clipboardData).getData("text/plain");
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0);
+          range.deleteContents();
+          range.insertNode(document.createTextNode(text));
+          range.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        } else {
+          document.execCommand("insertText", false, text);
+        }
+        // Ensure backend receives pasted text before any immediate compile click.
+        onEditorInput();
+      });
+
+      confirmSelectionBtn.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+      });
+      cancelSelectionBtn.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+      });
+      confirmEditBtn.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+      });
+      cancelEditBtn.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+      });
+
+      confirmSelectionBtn.addEventListener("click", () => {
+        if (activeSelectionStart < 0 || activeSelectionEnd <= activeSelectionStart) return;
+        latestPayload = {
+          ...latestPayload,
+          text: getEditorText(),
+          trigger: "confirm",
+          confirm_action: "confirm",
+          focus_applied: false,
+        };
+        setComponentValue(latestPayload);
+        latestPayload = { ...latestPayload, confirm_action: "" };
+        backendSelectionStatus = "confirmed";
+        backendConfirmedPreview = String(latestPayload.selection || "").trim();
+        renderPersistentSelection();
+        hideSelectionPopover();
+        updateSelectionLabelByStatus();
+        const selection = window.getSelection();
+        if (selection) {
+          selection.removeAllRanges();
+        }
+      });
+
+      cancelSelectionBtn.addEventListener("click", () => {
+        if (backendSelectionStatus !== "confirmed") {
+          clearPersistentSelection();
+        } else {
+          hideSelectionPopover();
+        }
+        latestPayload = {
+          ...latestPayload,
+          text: getEditorText(),
+          selection: "",
+          selection_start: -1,
+          selection_end: -1,
+          trigger: "cancel",
+          confirm_action: "cancel",
+          focus_applied: false,
+        };
+        setComponentValue(latestPayload);
+        latestPayload = { ...latestPayload, confirm_action: "" };
+        updateSelectionLabelByStatus();
+        const selection = window.getSelection();
+        if (selection) {
+          selection.removeAllRanges();
+        }
+      });
+
+      confirmEditBtn.addEventListener("click", () => {
+        if (!pendingEditConfirmation) {
+          hideEditConfirmPopover();
+          return;
+        }
+        const editPayload = pendingEditConfirmation;
+        pendingEditConfirmation = null;
+        setEditorText(editPayload.newText);
+
+        activeSelectionStart = Math.max(0, Math.min(editPayload.selectionStart, documentText.length));
+        activeSelectionEnd = Math.max(activeSelectionStart, Math.min(editPayload.selectionEnd, documentText.length));
+        backendSelectionStatus = "confirmed";
+        backendConfirmedPreview = documentText.slice(activeSelectionStart, activeSelectionEnd).trim();
+        renderPersistentSelection();
+
+        latestPayload = {
+          ...latestPayload,
+          text: documentText,
+          selection: documentText.slice(activeSelectionStart, activeSelectionEnd),
+          selection_start: activeSelectionStart,
+          selection_end: activeSelectionEnd,
+          trigger: "input",
+          confirm_action: "confirm_edit",
+          focus_applied: false,
+        };
+        setComponentValue(latestPayload);
+        latestPayload = { ...latestPayload, confirm_action: "" };
+        hideEditConfirmPopover();
+        updateSelectionLabelByStatus();
+      });
+
+      cancelEditBtn.addEventListener("click", () => {
+        pendingEditConfirmation = null;
+        hideEditConfirmPopover();
+        hideSelectionPopover();
+      });
+
+      function applyHeight(height) {
+        targetHeight = Number(height || 620);
+        const clamped = Math.max(320, targetHeight);
+        wrapper.style.height = `${clamped}px`;
+        wrapper.style.minHeight = `${clamped}px`;
+        const toolbarHeight = 45;
+        const editorHeight = Math.max(220, clamped - toolbarHeight);
+        editor.style.height = `${editorHeight}px`;
+        editor.style.minHeight = `${editorHeight}px`;
+        updateFrameHeight(0);
+      }
+
+      window.addEventListener("message", (event) => {
+        const data = event.data || {};
+        if (data.type !== "streamlit:render") return;
+        const args = data.args || {};
+        currentFilePath = String(args.file_path || "main.tex");
+        latestPayload = {
+          ...latestPayload,
+          file_path: currentFilePath,
+        };
+
+        applyHeight(args.height || 620);
+
+        const nextText = String(args.text || "");
+        backendSelectionStatus = String(args.selection_status || "none");
+        backendConfirmedPreview = String(args.confirmed_preview || "").trim();
+        const backendSyncEventId = Number(args.backend_sync_event_id || 0);
+        const nextHighlightStart = Number(args.highlight_start ?? -1);
+        const nextHighlightEnd = Number(args.highlight_end ?? -1);
+        const nowMs = Date.now();
+        const backendWantsClear =
+          nextHighlightStart < 0 || nextHighlightEnd <= nextHighlightStart;
+        const keepTransientFocus = nowMs < transientFocusLockUntil && backendWantsClear;
+        const forceBackendSync =
+          backendSyncEventId > 0 && backendSyncEventId !== lastBackendSyncEventId;
+
+        if (forceBackendSync) {
+          lastBackendSyncEventId = backendSyncEventId;
+          localDirty = false;
+          setEditorText(nextText);
+          activeSelectionStart = -1;
+          activeSelectionEnd = -1;
+          hideSelectionPopover();
+          pendingEditConfirmation = null;
+          hideEditConfirmPopover();
+        } else if (nextText !== documentText) {
+          const isEditorFocused = document.activeElement === editor;
+          if (!(localDirty && isEditorFocused)) {
+            setEditorText(nextText);
+            activeSelectionStart = -1;
+            activeSelectionEnd = -1;
+            hideSelectionPopover();
+            pendingEditConfirmation = null;
+            hideEditConfirmPopover();
+          }
+        } else {
+          localDirty = false;
+        }
+
+        const highlightChanged =
+          nextHighlightStart !== activeSelectionStart ||
+          nextHighlightEnd !== activeSelectionEnd;
+        if (highlightChanged && !keepTransientFocus) {
+          activeSelectionStart = nextHighlightStart;
+          activeSelectionEnd = nextHighlightEnd;
+          renderPersistentSelection();
+          if (activeSelectionStart < 0 || activeSelectionEnd <= activeSelectionStart) {
+            hideSelectionPopover();
+          }
+        }
+
+        if (forceBackendSync) {
+          const hasConfirmedSelection =
+            backendSelectionStatus === "confirmed" &&
+            activeSelectionStart >= 0 &&
+            activeSelectionEnd > activeSelectionStart;
+          latestPayload = {
+            ...latestPayload,
+            text: getEditorText(),
+            selection: hasConfirmedSelection
+              ? getEditorText().slice(activeSelectionStart, activeSelectionEnd)
+              : "",
+            selection_start: hasConfirmedSelection ? activeSelectionStart : -1,
+            selection_end: hasConfirmedSelection ? activeSelectionEnd : -1,
+            trigger: "backend_sync",
+            confirm_action: hasConfirmedSelection ? "preserve_selection" : "",
+            focus_applied: false,
+          };
+          setComponentValue(latestPayload);
+          latestPayload = { ...latestPayload, confirm_action: "" };
+        }
+
+        const focusEventId = Number(args.focus_event_id || 0);
+        if (focusEventId > 0 && focusEventId !== lastFocusEventId) {
+          lastFocusEventId = focusEventId;
+          const focusStart = Number(args.focus_start ?? -1);
+          const focusEnd = Number(args.focus_end ?? -1);
+          applyFocusToEditor(focusStart, focusEnd);
+          latestPayload = {
+            ...latestPayload,
+            text: getEditorText(),
+            trigger: "focus",
+            focus_applied: true,
+          };
+          setComponentValue(latestPayload);
+          latestPayload = {
+            ...latestPayload,
+            focus_applied: false,
+            trigger: "update",
+          };
+        }
+
+        updateSelectionLabelByStatus();
+      });
+
+      setComponentReady();
+      applyHeight(400);
+      setComponentValue(latestPayload);
+    </script>
+  </body>
+</html>
