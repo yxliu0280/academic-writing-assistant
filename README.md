@@ -2,14 +2,14 @@
 
 Academic Writing Assistant is an editor-native web application for academic manuscript verification and controlled revision. It combines role-based interaction, local document grounding, and bounded patch generation inside a Streamlit workspace designed for LaTeX-based writing.
 
-This repository contains the public release of the web application together with a compact public benchmark package under `data/`. It is designed so that users can install the interface locally, open the built-in demo workspace, inspect the released benchmark files, and walk through the main interaction loop from consistency checking to patch application and PDF export.
+This repository contains the public web app release. It is meant to be enough for someone to install the interface locally, open the built-in demo workspace, and walk through the main interaction loop from checking a claim to applying a patch and exporting a PDF. Evaluation pipelines, internal notes, and research datasets are intentionally excluded from this repository.
 
 ## Demo Video
 
-The video below shows a simple table consistency check in the built-in `Conversation 1` workspace. The manuscript text claims `93`, while the table reports `90`, and `Editor` proposes a bounded correction that the user can inspect and apply.
+The walkthrough below shows a simple end-to-end table consistency correction in the built-in `Conversation 1` workspace. The manuscript text claims `95%`, the table reports `88%`, and `Editor` proposes a bounded correction that the user can inspect and apply.
 
-https://github.com/user-attachments/assets/117301a3-c8c2-4cdf-8eee-5e298abd86ec
-
+<!-- Replace the placeholder below by dragging a sub-10MB .mp4 file into the GitHub README editor. GitHub will insert a standalone user-attachments video URL on the next line. -->
+_Demo video placeholder: insert GitHub-hosted video URL here._
 
 ## Core Capabilities
 
@@ -60,21 +60,28 @@ Included in this repository:
 - editor and chat UI components
 - runtime configuration template
 - built-in demo manuscript assets
-- a compact public `data/` directory with the main benchmark release files
 
 Not included in this repository:
 
 - personal API keys
 - local application state
-- full evaluation pipelines
+- evaluation datasets
 - internal testing and debugging material
-- non-release curation assets and auxiliary benchmark artifacts
+- research-only benchmark scripts
 
-## Data Files
+## Public Data Files
 
-This repository also includes a compact `data/` directory containing the main benchmark files used in the public release. The released files cover table consistency, figure consistency, citation consistency, terminology consistency, role reliability, and system-level evaluation.
+This repository also includes a compact `data/` directory with the main benchmark files referenced by the project:
 
-For dataset-level notes, file descriptions, and sample counts, see `data/README.md`.
+- [`data/table_consistency/table_main_200.jsonl`](data/table_consistency/table_main_200.jsonl)
+- [`data/figure_consistency/figure_main_200.jsonl`](data/figure_consistency/figure_main_200.jsonl)
+- [`data/citation_consistency/citation_single_main_200.jsonl`](data/citation_consistency/citation_single_main_200.jsonl)
+- [`data/citation_consistency/citation_multi_main_100.jsonl`](data/citation_consistency/citation_multi_main_100.jsonl)
+- [`data/terminology_consistency/terminology_main_200.jsonl`](data/terminology_consistency/terminology_main_200.jsonl)
+- [`data/role_reliability/role_reliability_all_200.jsonl`](data/role_reliability/role_reliability_all_200.jsonl)
+- [`data/system_evaluation/system_eval_50.jsonl`](data/system_evaluation/system_eval_50.jsonl)
+
+For dataset-level notes, sample counts, and file descriptions, see [`data/README.md`](data/README.md).
 
 ## Security and Privacy
 
@@ -219,6 +226,12 @@ bash scripts/run_app.sh
 
 The shortest useful walkthrough is to go through the three roles in order and let each one handle a different kind of problem. The instructions below are written for that path.
 
+Before you start, one practical note about providers:
+
+- with the safe default `provider = "none"`, the built-in walkthrough still lets you exercise table checking, citation checking, terminology checking, patch preview, patch apply, and compile
+- figure checking will stay explicit about its boundary and ask you to configure a multimodal provider before it makes a grounded visual judgment
+- if you want the full model-backed behavior described in the dissertation, configure a real text provider and a real multimodal provider in your local `model_config.toml`
+
 ### Step 1. Open `Conversation 1`
 
 Launch the application and keep the default workspace that appears on first run. You do not need to upload anything yet.
@@ -228,7 +241,7 @@ Launch the application and keep the default workspace that appears on first run.
 In `main.tex`, select the sentence:
 
 ```text
-As shown in Table~\ref{tab:main_results}, our method achieves 93\% accuracy.
+Table 1 shows our accuracy is 95%.
 ```
 
 Then:
@@ -280,13 +293,16 @@ Then:
 1. confirm the selection
 2. switch to `Editor`
 3. run citation and terminology checks
-4. inspect the patch preview
-5. apply the patch if it matches your intent
+4. when `Editor` asks whether to prepare a patch diff, confirm once
+5. inspect the patch preview
+6. if the proposed patch matches your intent, confirm a second time to apply it
 
 Expected behavior:
 
 - the system should surface citation and terminology issues
 - patching should remain preview-first and bounded
+- the document should not change after the first confirmation alone
+- the document should only change after the second confirmation
 
 This is the key author-in-the-loop step. The app should not silently rewrite the document. You should be able to inspect the proposed change before deciding whether to apply it.
 
@@ -301,7 +317,7 @@ After applying the patch:
 Expected behavior:
 
 - if a local TeX compiler is available, compile should succeed
-- export should produce a downloadable PDF artifact
+- export should trigger the browser download or save flow for the compiled PDF
 
 If compile succeeds here, you have verified the full editor-native path rather than only the checking UI.
 
@@ -316,6 +332,8 @@ If neither is installed, the app can still be used for editing and consistency c
 
 For users who only want to inspect the interaction design, the app is still usable without a TeX installation. For users who want the full workflow described above, installing a local TeX toolchain is strongly recommended.
 
+The export step is browser-driven. In a normal desktop browser session, clicking `Export PDF` should either download the file directly or open a save prompt, depending on the browser.
+
 ## Project Structure
 
 ```text
@@ -323,13 +341,13 @@ academic-writing-assistant/
 ├── app.py
 ├── README.md
 ├── LICENSE
+├── data/
 ├── requirements.txt
 ├── model_config.example.toml
 ├── agents/
 ├── assets/
 ├── components/
 ├── core/
-├── data/
 ├── roles/
 ├── scripts/
 ├── test_assets/
