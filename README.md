@@ -60,15 +60,21 @@ Included in this repository:
 - editor and chat UI components
 - runtime configuration template
 - built-in demo manuscript assets
+- a compact public `data/` directory with the main benchmark release files
 
 Not included in this repository:
 
 - personal API keys
 - local application state
-- evaluation datasets
+- full evaluation pipelines
 - internal testing and debugging material
-- research-only benchmark scripts
+- non-release curation assets and auxiliary benchmark artifacts
 
+## Data Files
+
+This repository also includes a compact `data/` directory containing the main benchmark files used in the public release. The released files cover table consistency, figure consistency, citation consistency, terminology consistency, role reliability, and system-level evaluation.
+
+For dataset-level notes, file descriptions, and sample counts, see `data/README.md`.
 ## Security and Privacy
 
 - No real API key is stored in this repository.
