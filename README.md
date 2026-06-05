@@ -4,6 +4,8 @@ Academic Writing Assistant is an editor-native web application for academic manu
 
 This repository contains the public web app release. It is meant to be enough for someone to install the interface locally, open the built-in demo workspace, and walk through the main interaction loop from checking a claim to applying a patch and exporting a PDF. Evaluation pipelines, internal notes, and research datasets are intentionally excluded from this repository.
 
+
+
 ## Core Capabilities
 
 - Role-based interaction with three modes:
