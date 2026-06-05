@@ -2,14 +2,13 @@
 
 Academic Writing Assistant is an editor-native web application for academic manuscript verification and controlled revision. It combines role-based interaction, local document grounding, and bounded patch generation inside a Streamlit workspace designed for LaTeX-based writing.
 
-This repository contains the public web app release. It is meant to be enough for someone to install the interface locally, open the built-in demo workspace, and walk through the main interaction loop from checking a claim to applying a patch and exporting a PDF. Evaluation pipelines, internal notes, and research datasets are intentionally excluded from this repository.
+This repository contains the public web app release together with a compact public benchmark package under `data/`. It is meant to be enough for someone to install the interface locally, open the built-in demo workspace, inspect the released benchmark files, and walk through the main interaction loop from checking a claim to applying a patch and exporting a PDF. Full evaluation pipelines, internal notes, and non-release research assets are intentionally excluded from this repository.
 
 ## Demo Video
 
 The walkthrough below shows a simple end-to-end table consistency correction in the built-in `Conversation 1` workspace. The manuscript text claims `95%`, the table reports `88%`, and `Editor` proposes a bounded correction that the user can inspect and apply.
 
-<!-- Replace the placeholder below by dragging a sub-10MB .mp4 file into the GitHub README editor. GitHub will insert a standalone user-attachments video URL on the next line. -->
-_Demo video placeholder: insert GitHub-hosted video URL here._
+https://github.com/user-attachments/assets/117301a3-c8c2-4cdf-8eee-5e298abd86ec
 
 ## Core Capabilities
 
