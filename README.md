@@ -4,7 +4,11 @@ Academic Writing Assistant is an editor-native web application for academic manu
 
 This repository contains the public web app release. It is meant to be enough for someone to install the interface locally, open the built-in demo workspace, and walk through the main interaction loop from checking a claim to applying a patch and exporting a PDF. Evaluation pipelines, internal notes, and research datasets are intentionally excluded from this repository.
 
+## Demo Video
 
+The video below shows a simple table consistency check in the built-in `Conversation 1` workspace. The manuscript text claims `93`, while the table reports `90`, and `Editor` proposes a bounded correction that the user can inspect and apply.
+
+https://github.com/user-attachments/assets/0662bbb5-d949-4288-bc18-93f190e5d573
 
 ## Core Capabilities
 
