@@ -8,7 +8,8 @@ This repository contains the public web app release. It is meant to be enough fo
 
 The video below shows a simple table consistency check in the built-in `Conversation 1` workspace. The manuscript text claims `93`, while the table reports `90`, and `Editor` proposes a bounded correction that the user can inspect and apply.
 
-https://github.com/user-attachments/assets/0662bbb5-d949-4288-bc18-93f190e5d573
+https://github.com/user-attachments/assets/117301a3-c8c2-4cdf-8eee-5e298abd86ec
+
 
 ## Core Capabilities
 
