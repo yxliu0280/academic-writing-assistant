@@ -2,7 +2,7 @@
 
 Academic Writing Assistant is an editor-native web application for academic manuscript verification and controlled revision. It combines role-based interaction, local document grounding, and bounded patch generation inside a Streamlit workspace designed for LaTeX-based writing.
 
-This public repository is the app release for the web system itself. It includes the runtime code and built-in demo assets required to launch and use the interface. Evaluation pipelines, internal notes, and research datasets are intentionally excluded from this repository.
+This repository contains the public web app release. It is meant to be enough for someone to install the interface locally, open the built-in demo workspace, and walk through the main interaction loop from checking a claim to applying a patch and exporting a PDF. Evaluation pipelines, internal notes, and research datasets are intentionally excluded from this repository.
 
 ## Core Capabilities
 
@@ -24,6 +24,25 @@ This public repository is the app release for the web system itself. It includes
   - compile LaTeX
   - export PDF
 - Built-in first-run demo workspace: `Conversation 1`
+
+## What First-Time Users Should Expect
+
+The easiest way to understand the system is to treat it as a guided local demo rather than a blank writing workspace.
+
+On first launch, the app creates a preloaded workspace called `Conversation 1`. That workspace already contains:
+
+- a LaTeX manuscript
+- a bibliography file
+- a demo figure
+
+You can use it immediately to test:
+
+- a table mismatch with `Reviewer`
+- a figure-based check with `Advisor`
+- citation and terminology checks with `Editor`
+- the patch, compile, and export workflow
+
+In other words, new users do not need to prepare their own files before they can see the main behavior of the app.
 
 ## Repository Scope
 
@@ -116,9 +135,11 @@ When Streamlit starts, open the local URL shown in the terminal, usually somethi
 http://localhost:8501
 ```
 
+If everything is installed correctly, the app should open directly into the main workspace view with `Conversation 1` available in the sidebar.
+
 ## Model Configuration
 
-On first launch, the app creates a local `model_config.toml` from `model_config.example.toml`.
+On first launch, the app creates a local `model_config.toml` from `model_config.example.toml`. Most users only need to touch this file if they want real model-backed responses instead of a no-key local setup.
 
 The safe default template is:
 
@@ -171,6 +192,8 @@ These files are sourced from:
 
 This built-in workspace is the recommended first-use path because it requires no manual file hunting and exercises the intended web workflow.
 
+If you are evaluating the project for the first time, it is best to keep this workspace unchanged and use it as the initial walkthrough case. That gives you a predictable path through the interface and makes it easier to understand what each role is supposed to do.
+
 If you want to reset the app back to the initial demo state:
 
 ```bash
@@ -180,9 +203,11 @@ bash scripts/run_app.sh
 
 ## How to Use the App
 
+The shortest useful walkthrough is to go through the three roles in order and let each one handle a different kind of problem. The instructions below are written for that path.
+
 ### Step 1. Open `Conversation 1`
 
-Launch the application and keep the default workspace that appears on first run.
+Launch the application and keep the default workspace that appears on first run. You do not need to upload anything yet.
 
 ### Step 2. Test table consistency with `Reviewer`
 
@@ -203,6 +228,8 @@ Expected behavior:
 - the system should flag a text-table mismatch
 - the response should remain evidence-oriented rather than directly rewriting the text
 
+This is the fastest way to see the difference between detection and rewriting. `Reviewer` should tell you what is inconsistent, but it should not behave like an automatic editor.
+
 ### Step 3. Test figure consistency with `Advisor`
 
 Select the sentence around the figure reference:
@@ -221,6 +248,8 @@ Expected behavior:
 
 - the system should provide a grounded figure-oriented finding or a clearly scoped uncertainty
 - the response should explain the issue rather than directly rewriting the text
+
+This step is useful because it shows that `Advisor` is still analysis-oriented, but more interpretive than `Reviewer`.
 
 ### Step 4. Test citation and terminology with `Editor`
 
@@ -245,6 +274,8 @@ Expected behavior:
 - the system should surface citation and terminology issues
 - patching should remain preview-first and bounded
 
+This is the key author-in-the-loop step. The app should not silently rewrite the document. You should be able to inspect the proposed change before deciding whether to apply it.
+
 ### Step 5. Compile and export
 
 After applying the patch:
@@ -258,6 +289,8 @@ Expected behavior:
 - if a local TeX compiler is available, compile should succeed
 - export should produce a downloadable PDF artifact
 
+If compile succeeds here, you have verified the full editor-native path rather than only the checking UI.
+
 ## Compile and Export Notes
 
 The compile pipeline requires a local LaTeX compiler. The app checks for:
@@ -266,6 +299,8 @@ The compile pipeline requires a local LaTeX compiler. The app checks for:
 - `pdflatex`
 
 If neither is installed, the app can still be used for editing and consistency checking, but compile/export verification will be limited.
+
+For users who only want to inspect the interaction design, the app is still usable without a TeX installation. For users who want the full workflow described above, installing a local TeX toolchain is strongly recommended.
 
 ## Project Structure
 
@@ -297,6 +332,8 @@ Check your local `model_config.toml`:
 - verify model names
 - verify any custom `base_url` values
 
+If you are just trying to launch the interface for the first time, you can also leave `provider = "none"` and explore the UI before configuring any external model service.
+
 ### Compile fails immediately
 
 Install a local TeX distribution and confirm that either `latexmk` or `pdflatex` is available on your system `PATH`.
@@ -309,6 +346,12 @@ Delete local state and relaunch:
 rm -rf .state
 bash scripts/run_app.sh
 ```
+
+## Suggested Citation / Project Description
+
+If you need a short description for a project page, repository sidebar, or demo list, the following wording works well:
+
+> An editor-native academic writing assistant for consistency checking, role-based feedback, and controlled patching in LaTeX workflows.
 
 ## License
 
