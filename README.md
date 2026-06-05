@@ -1,45 +1,126 @@
-# Academic Writing Companion Agent
+# Academic Writing Assistant
 
-An editor-native academic writing web app for local consistency checking, role-based interaction, and bounded patching.
+Academic Writing Assistant is an editor-native web application for academic manuscript verification and controlled revision. It combines role-based interaction, local document grounding, and bounded patch generation inside a Streamlit workspace designed for LaTeX-based writing.
 
-This public repository is the minimal app release. It includes only the code and assets needed to run the web interface, plus the built-in `Conversation 1` demo.
+This public repository is the app release for the web system itself. It includes the runtime code and built-in demo assets required to launch and use the interface. Evaluation pipelines, internal notes, and research datasets are intentionally excluded from this repository.
 
-## What This App Does
+## Core Capabilities
 
-- `Reviewer`: returns evidence-grounded findings
-- `Advisor`: explains issues and suggests revisions
-- `Editor`: proposes bounded patches that must be previewed and confirmed
+- Role-based interaction with three modes:
+  - `Reviewer`: evidence-grounded findings only
+  - `Advisor`: findings plus explanation and revision guidance
+  - `Editor`: findings plus bounded patch proposals that must be previewed and confirmed
+- Four manuscript consistency tracks:
+  - table consistency
+  - figure consistency
+  - citation consistency
+  - terminology consistency
+- Interactive editor workflow:
+  - select text
+  - confirm selection scope
+  - run checks
+  - preview patch
+  - apply patch
+  - compile LaTeX
+  - export PDF
+- Built-in first-run demo workspace: `Conversation 1`
 
-Supported consistency tracks:
+## Repository Scope
 
-- table consistency
-- figure consistency
-- citation consistency
-- terminology consistency
+Included in this repository:
 
-## Safety Note
+- the Streamlit application
+- role, router, and consistency runtime code
+- editor and chat UI components
+- runtime configuration template
+- built-in demo manuscript assets
 
-- No real API key is included in this repository.
-- `model_config.toml` is local-only and gitignored.
-- Users should create their own local config and choose their own provider/model.
+Not included in this repository:
 
-## Quick Start
+- personal API keys
+- local application state
+- evaluation datasets
+- internal testing and debugging material
+- research-only benchmark scripts
+
+## Security and Privacy
+
+- No real API key is stored in this repository.
+- `model_config.toml` is created locally and is gitignored.
+- The tracked template file `model_config.example.toml` is intentionally blank-safe.
+- If you fork or clone this project, you should configure your own provider credentials locally.
+
+## System Requirements
+
+Minimum requirements:
+
+- Python 3.10 or newer
+- `pip`
+- a modern browser
+
+Optional but recommended for the full editor workflow:
+
+- a local TeX distribution with `latexmk` or `pdflatex`
+  - macOS: MacTeX
+  - Linux: TeX Live
+  - Windows: TeX Live or MiKTeX
+
+Without a TeX compiler, the app can still run the UI and consistency checks, but LaTeX compile/export features will not complete successfully.
+
+## Installation
+
+### 1. Clone the repository
 
 ```bash
-cd academic-writing-companion-agent
+git clone https://github.com/yxliu0280/academic-writing-assistant.git
+cd academic-writing-assistant
+```
+
+### 2. Create and activate a virtual environment
+
+macOS / Linux:
+
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
+```
+
+Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+### 3. Install Python dependencies
+
+```bash
 pip install -r requirements.txt
+```
+
+### 4. Start the app
+
+```bash
 bash scripts/run_app.sh
 ```
 
-Then open the local Streamlit URL shown in the terminal.
+If `bash scripts/run_app.sh` is not convenient on your platform, you can also run:
+
+```bash
+streamlit run app.py
+```
+
+When Streamlit starts, open the local URL shown in the terminal, usually something like:
+
+```text
+http://localhost:8501
+```
 
 ## Model Configuration
 
-On first run, the app creates a local `model_config.toml` from `model_config.example.toml`.
+On first launch, the app creates a local `model_config.toml` from `model_config.example.toml`.
 
-Safe default:
+The safe default template is:
 
 ```toml
 provider = "none"
@@ -48,7 +129,9 @@ text_model = "qwen-plus"
 multimodal_model = "qwen-vl-max-latest"
 ```
 
-If you want real model calls, edit your local `model_config.toml`:
+This allows users to start with a no-key local setup.
+
+To enable real model calls, edit your local `model_config.toml` and supply your own provider settings. Example:
 
 ```toml
 provider = "aliyun"
@@ -57,46 +140,137 @@ text_model = "qwen-plus"
 multimodal_model = "qwen-vl-max-latest"
 ```
 
-You can also switch to other supported providers such as `openai` or `openai-compatible`.
+Supported provider modes include:
 
-## Built-In Demo: `Conversation 1`
+- `none`
+- `mock`
+- `aliyun`
+- `openai`
+- `openai-compatible`
 
-On a fresh start, the app automatically creates a demo workspace called `Conversation 1`.
+Important:
 
-It already contains:
+- never commit your local `model_config.toml`
+- never place a real API key into `model_config.example.toml`
+
+## First Launch Experience
+
+On a fresh start, the application automatically seeds a demo workspace named `Conversation 1`.
+
+The demo workspace contains:
 
 - `main.tex`
 - `references.bib`
 - `dummy_plot.png`
 
-These files come from:
+These files are sourced from:
 
 - [`test_assets/full_system_walkthrough/sample_paper.tex`](test_assets/full_system_walkthrough/sample_paper.tex)
 - [`test_assets/full_system_walkthrough/references.bib`](test_assets/full_system_walkthrough/references.bib)
 - [`test_assets/full_system_walkthrough/dummy_plot.png`](test_assets/full_system_walkthrough/dummy_plot.png)
 
-If you want to reset the app back to the built-in demo state:
+This built-in workspace is the recommended first-use path because it requires no manual file hunting and exercises the intended web workflow.
+
+If you want to reset the app back to the initial demo state:
 
 ```bash
 rm -rf .state
 bash scripts/run_app.sh
 ```
 
-## Recommended First Demo Flow
+## How to Use the App
 
-Use the default `Conversation 1` and test in this order:
+### Step 1. Open `Conversation 1`
 
-1. Select `Table 1 shows our accuracy is 95\%.`
-2. Confirm the selection and run a table check with `Reviewer`.
-3. Select the figure sentence around `Figure~\ref{fig:loss}` and run a figure check with `Advisor`.
-4. Select the paragraph containing `\cite{Fake2099}` and the terminology paragraph below it.
-5. Switch to `Editor`, run citation and terminology checks, preview the patch, and apply it.
-6. Compile and export to verify the full in-editor loop.
+Launch the application and keep the default workspace that appears on first run.
 
-## Minimal Public Repository Layout
+### Step 2. Test table consistency with `Reviewer`
+
+In `main.tex`, select the sentence:
 
 ```text
-academic-writing-companion-agent/
+Table 1 shows our accuracy is 95%.
+```
+
+Then:
+
+1. confirm the selection
+2. switch to `Reviewer`
+3. run a table consistency check
+
+Expected behavior:
+
+- the system should flag a text-table mismatch
+- the response should remain evidence-oriented rather than directly rewriting the text
+
+### Step 3. Test figure consistency with `Advisor`
+
+Select the sentence around the figure reference:
+
+```text
+As shown in Figure~\ref{fig:loss} ...
+```
+
+Then:
+
+1. confirm the selection
+2. switch to `Advisor`
+3. run a figure consistency check
+
+Expected behavior:
+
+- the system should provide a grounded figure-oriented finding or a clearly scoped uncertainty
+- the response should explain the issue rather than directly rewriting the text
+
+### Step 4. Test citation and terminology with `Editor`
+
+Select the paragraph containing:
+
+```text
+\cite{Fake2099}
+```
+
+and the terminology paragraph below it.
+
+Then:
+
+1. confirm the selection
+2. switch to `Editor`
+3. run citation and terminology checks
+4. inspect the patch preview
+5. apply the patch if it matches your intent
+
+Expected behavior:
+
+- the system should surface citation and terminology issues
+- patching should remain preview-first and bounded
+
+### Step 5. Compile and export
+
+After applying the patch:
+
+1. compile the LaTeX document
+2. inspect compile status
+3. export the generated PDF
+
+Expected behavior:
+
+- if a local TeX compiler is available, compile should succeed
+- export should produce a downloadable PDF artifact
+
+## Compile and Export Notes
+
+The compile pipeline requires a local LaTeX compiler. The app checks for:
+
+- `latexmk`
+- `pdflatex`
+
+If neither is installed, the app can still be used for editing and consistency checking, but compile/export verification will be limited.
+
+## Project Structure
+
+```text
+academic-writing-assistant/
 ├── app.py
 ├── README.md
 ├── LICENSE
@@ -107,11 +281,35 @@ academic-writing-companion-agent/
 ├── components/
 ├── core/
 ├── roles/
-├── scripts/run_app.sh
-├── test_assets/full_system_walkthrough/
+├── scripts/
+├── test_assets/
 └── tools/
+```
+
+## Troubleshooting
+
+### The app starts but model-backed features do not respond
+
+Check your local `model_config.toml`:
+
+- verify `provider`
+- verify `api_key`
+- verify model names
+- verify any custom `base_url` values
+
+### Compile fails immediately
+
+Install a local TeX distribution and confirm that either `latexmk` or `pdflatex` is available on your system `PATH`.
+
+### I want to restart from the built-in demo
+
+Delete local state and relaunch:
+
+```bash
+rm -rf .state
+bash scripts/run_app.sh
 ```
 
 ## License
 
-See [`LICENSE`](LICENSE).
+This project is released under the MIT License. See [`LICENSE`](LICENSE).
