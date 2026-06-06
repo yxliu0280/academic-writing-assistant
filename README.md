@@ -73,8 +73,6 @@ This repository also includes a compact `data/` directory with the main benchmar
 - [`data/role_reliability/role_reliability_all_200.jsonl`](data/role_reliability/role_reliability_all_200.jsonl)
 - [`data/system_evaluation/system_eval_50.jsonl`](data/system_evaluation/system_eval_50.jsonl)
 
-For dataset-level notes, sample counts, and file descriptions, see [`data/README.md`](data/README.md).
-
 ## Security and Privacy
 
 - No real API key is stored in this repository.
