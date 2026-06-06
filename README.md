@@ -370,12 +370,6 @@ rm -rf .state
 bash scripts/run_app.sh
 ```
 
-## Suggested Citation / Project Description
-
-If you need a short description for a project page, repository sidebar, or demo list, the following wording works well:
-
-> An editor-native academic writing assistant for consistency checking, role-based feedback, and controlled patching in LaTeX workflows.
-
 ## License
 
 This project is released under the MIT License. See [`LICENSE`](LICENSE).
